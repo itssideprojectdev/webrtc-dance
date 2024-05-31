@@ -1,0 +1,33 @@
+{
+  "name": "webrtc-dance-server",
+  "version": "1.0.0",
+  "main": "main.ts",
+  "license": "MIT",
+  "scripts": {
+    "console": "node esbuild.js && node ./dist/index.js",
+
+    "build": "rimraf dist && node esbuild.js ",
+    "watch": "rimraf dist && node esbuild-watch.js ",
+    "pretty": "npx prettier \"*/**/*.ts*\"  --config .prettierrc --write",
+    "lint": "npx tslint -p tsconfig.json --fix",
+    "start": "node ./dist/index.js",
+    "start-mon": "nodemon ./dist/index.js",
+    "debug": "node --inspect-brk ./dist/index.js",
+    "build-prod": "rimraf dist && node esbuild.js "
+  },
+  "dependencies": {
+    "socket.io": "^4.7.5",
+    "@roamhq/wrtc": "^0.8.0",
+    "dotenv":"16.0.3",
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.13",
+    "@types/express": "^4.17.21",
+    "nodemon": "^2.0.6",
+    "esbuild": "0.21.4",
+    "esbuild-plugin-alias": "0.2.1",
+    "esbuild-node-externals": "1.13.1",
+    "typescript": "^5.4.5"
+  }
+}
