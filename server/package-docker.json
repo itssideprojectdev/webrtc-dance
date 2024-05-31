@@ -5,11 +5,16 @@
   "license": "MIT",
   "scripts": {},
   "dependencies": {
-    "socket.io": "^4.7.5",
-    "cors": "^2.8.5",
     "@roamhq/wrtc": "^0.8.0",
+    "cors": "^2.8.5",
     "dotenv": "16.0.3",
-    "express": "^4.19.2"
+    "openai": "4.47.3",
+    "express": "^4.19.2",
+    "lamejs": "zhuker/lamejs",
+    "zod": "^3.23.8",
+    "zod-to-json-schema": "^3.23.0",
+    "elevenlabs-node": "^2.0.3",
+    "socket.io": "^4.7.5"
   },
   "devDependencies": {}
 }

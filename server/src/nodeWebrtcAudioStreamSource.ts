@@ -1,0 +1,40 @@
+import {RTCIceCandidate, nonstandard, MediaStream, RTCPeerConnection, RTCSessionDescription} from '@roamhq/wrtc';
+import {Readable} from 'stream';
+
+export class NodeWebRtcAudioStreamSource extends nonstandard.RTCAudioSource {
+  addStream(readable: Readable, bitsPerSample = 16, sampleRate = 48000, channelCount = 1) {
+    let cache = Buffer.alloc(0);
+    let streamEnd = false;
+    readable.on('data', (buffer) => {
+      console.log('stream data');
+      cache = Buffer.concat([cache, buffer]);
+    });
+
+    readable.on('end', () => {
+      console.log('stream end');
+      streamEnd = true;
+    });
+
+    const processData = () => {
+      const byteLength = ((sampleRate * bitsPerSample) / 8 / 100) * channelCount; // node-webrtc audio by default every 10ms, it is 1/100 second
+      if (cache.length >= byteLength || streamEnd) {
+        const buffer = cache.slice(0, byteLength);
+        cache = cache.slice(byteLength);
+        const samples = new Int16Array(new Uint8Array(buffer).buffer);
+        console.log('sending data');
+        this.onData({
+          bitsPerSample,
+          sampleRate,
+          channelCount,
+          numberOfFrames: samples.length,
+          type: 'data',
+          samples,
+        });
+      }
+      if (!streamEnd || cache.length >= byteLength) {
+        setTimeout(() => processData(), 10); // every 10 ms, required by node-webrtc audio
+      }
+    };
+    processData();
+  }
+}

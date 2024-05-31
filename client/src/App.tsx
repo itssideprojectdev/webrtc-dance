@@ -1,63 +1,118 @@
-import React, { ReactElement, useState } from 'react'
-import { Link } from 'react-router-dom'
+import React, {useState, useRef, useEffect} from 'react';
+import io from 'socket.io-client';
 
-function App(): ReactElement {
-  const [count, setCount] = useState(0)
+function App() {
+  const [isRecording, setIsRecording] = useState(false);
+  const socketRef = useRef();
+  const localStreamRef = useRef();
+  const peerConnectionRef = useRef();
+  const audioElementRef = useRef();
+
+  const startRecording = async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({audio: true});
+    localStreamRef.current = stream;
+    const peerConnection = new RTCPeerConnection({
+      iceServers: [
+        {urls: 'stun:stun.l.google.com:19302'},
+        // Add TURN servers here if needed
+      ],
+    });
+    peerConnectionRef.current = peerConnection;
+
+    stream.getTracks().forEach((track) => peerConnection.addTrack(track, stream));
+
+    peerConnection.onicecandidate = (event) => {
+      if (event.candidate) {
+        socketRef.current.emit('candidate', event.candidate);
+      }
+    };
+
+    peerConnection.ontrack = (event) => {
+      console.log('on track');
+      const [remoteStream] = event.streams;
+      audioElementRef.current.srcObject = remoteStream;
+    };
+
+    const offer = await peerConnection.createOffer();
+    await peerConnection.setLocalDescription(offer);
+
+    socketRef.current.emit('offer', peerConnection.localDescription);
+
+    socketRef.current.on('answer', async (description) => {
+      const desc = new RTCSessionDescription(description);
+      await peerConnection.setRemoteDescription(desc);
+    });
+
+    socketRef.current.on('candidate', async (candidate) => {
+      await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+    });
+
+    setIsRecording(true);
+  };
+
+  const stopRecording = () => {
+    localStreamRef.current.getTracks().forEach((track) => track.stop());
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close();
+    }
+    setIsRecording(false);
+  };
+
+  useEffect(() => {
+    const socket = io('http://localhost:3000');
+    socketRef.current = socket;
+
+    return () => {
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach((track) => track.stop());
+      }
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();
+      }
+    };
+  }, []);
 
   return (
-    <div className="p-20 border shadow-xl border-gray-50 rounded-xl">
-      <header>
-        <p className="pb-3 text-2xl">Hello Vite + React + Tailwind CSS!</p>
-        <p>
-          <button
-            className="pt-1 pb-1 pl-2 pr-2 text-sm text-purple-100 bg-purple-400 rounded"
-            onClick={() => setCount((count) => count + 1)}
-          >
-            count is: {count}
-          </button>
-        </p>
-        <p className="pt-3 pb-3">
-          Edit{' '}
-          <code className="border border-1 pl-1 pr-1 pb-0.5 pt-0.5 rounded border-purple-400 font-mono text-sm bg-purple-100 text-purple-900">
-            src/App.tsx
-          </code>{' '}
-          and save to test HMR updates.
-        </p>
-        <p>
-          <Link to="/about" className="text-purple-400 underline">
-            about
-          </Link>
-          {' | '}
-          <a
-            className="text-purple-400 underline"
-            href="https://reactjs.org"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Learn React
-          </a>
-          {' | '}
-          <a
-            className="text-purple-400 underline"
-            href="https://vitejs.dev/guide/features.html"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Vite Docs
-          </a>
-          {' | '}
-          <a
-            className="text-purple-400 underline"
-            href="https://tailwindcss.com/docs"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Tailwind CSS Docs
-          </a>
-        </p>
-      </header>
+    <div>
+      <h1>Audio Chat Bot</h1>
+      <button onClick={isRecording ? stopRecording : startRecording}>
+        {isRecording ? 'Stop Recording' : 'Start Recording'}
+      </button>
+      <audio ref={audioElementRef} autoPlay></audio>
     </div>
-  )
+  );
 }
 
-export default App
+export default App;
+/*
+const mediaRecorder = new MediaRecorder(stream, {
+  mimeType: 'audio/webm',
+});
+const recordedChunks = [];
+
+mediaRecorder.ondataavailable = (event) => {
+  if (event.data.size > 0) {
+    recordedChunks.push(event.data);
+  }
+};
+
+mediaRecorder.onstop = () => {
+  const blob = new Blob(recordedChunks, {type: 'audio/webm'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.style.display = 'none';
+  a.href = url;
+  a.download = 'audio_recording.webm';
+  document.body.appendChild(a);
+  a.click();
+  URL.revokeObjectURL(url);
+};
+mediaRecorder.start();
+setTimeout(() => {
+  mediaRecorder.stop();
+}, 2000);
+
+return;*/
