@@ -6,8 +6,9 @@
   "scripts": {},
   "dependencies": {
     "socket.io": "^4.7.5",
+    "cors": "^2.8.5",
     "@roamhq/wrtc": "^0.8.0",
-    "dotenv":"16.0.3",
+    "dotenv": "16.0.3",
     "express": "^4.19.2"
   },
   "devDependencies": {}

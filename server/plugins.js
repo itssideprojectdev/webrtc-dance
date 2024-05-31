@@ -6,5 +6,6 @@ const alias = require('esbuild-plugin-alias');
 module.exports = [
   alias({
   }),
-  /*nodeExternalsPlugin(),*/
+  nodeExternalsPlugin(),
+
 ];
