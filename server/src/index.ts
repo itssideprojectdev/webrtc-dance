@@ -1,4 +1,3 @@
-import ElevenLabs from 'elevenlabs-node';
 import {config} from 'dotenv';
 import express from 'express';
 import http from 'http';
@@ -8,14 +7,10 @@ import lamejs from 'lamejs';
 import fs from 'fs';
 import cors from 'cors';
 import {RTCAudioData} from '@roamhq/wrtc/types/nonstandard';
-import {OpenAI} from 'openai';
+import {OpenAI, toFile} from 'openai';
 import {makeOpenaiRequest, makeOpenaiRequestRaw} from './openai';
 import {z} from 'zod';
-import {WaveFile} from 'wavefile';
 import {NodeWebRtcAudioStreamSource} from './nodeWebrtcAudioStreamSource';
-import {Readable} from 'stream';
-import wav from 'wav-decoder';
-import wavEncoder from 'wav-encoder';
 import axios from 'axios';
 
 config();
@@ -68,7 +63,16 @@ async function main() {
         let minimumThreshold = 20;
         let countInLowestSample = 0;
         let startedHearingSound = false;
+        let stopSink = false;
+        function resetSink() {
+          countInLowestSample = 0;
+          startedHearingSound = false;
+          stopSink = false;
+        }
         sink.ondata = (data: RTCAudioData) => {
+          if (stopSink) {
+            return;
+          }
           // todo force record whitenoise initial to set baseline
 
           const sum = data.samples.reduce((a, b) => a + b, 0);
@@ -99,7 +103,7 @@ async function main() {
         };
 
         async function onFinish() {
-          sink.stop();
+          stopSink = true;
           console.log('processing audio');
           console.time('start');
           const mp3buf = mp3Encoder.flush();
@@ -107,13 +111,12 @@ async function main() {
             mp3Data.push(mp3buf);
           }
           const blob = new Blob(mp3Data, {type: 'audio/mp3'});
+          mp3Data.length = 0;
           const buffer = Buffer.from(await blob.arrayBuffer());
-          fs.writeFileSync('audio_output.mp3', buffer);
           console.log('wrote audio');
-          await timeout(5);
           const openai = new OpenAI(process.env.OPENAI_API_KEY);
           const transcription = await openai.audio.transcriptions.create({
-            file: fs.createReadStream('audio_output.mp3'),
+            file: await toFile(buffer, 'audio.mp3'),
             model: 'whisper-1',
             language: 'en',
             response_format: 'text',
@@ -133,21 +136,21 @@ async function main() {
 
           const tResponse = await getElevenLabs({
             // Required Parameters
-            fileName: 'audio.wav', // The name of your audio file
             textInput: response, // The text you want to convert to speech
             // Optional Parameters
-            voiceId: '21m00Tcm4TlvDq8ikWAM', // A different Voice ID from the default
-            stability: 0.5, // The stability for the converted speech
-            similarityBoost: 0.5, // The similarity boost for the converted speech
+            voiceId: 'N2lVS1w4EtoT3dr4eOWO', // A different Voice ID from the default
+            // stability: 0.5, // The stability for the converted speech
+            // similarityBoost: 0.5, // The similarity boost for the converted speech
             modelId: 'eleven_multilingual_v2', // The ElevenLabs Model ID
-            style: 1, // The style exaggeration for the converted speech
-            speakerBoost: true, // The speaker boost for the converted speech
+            // style: 1, // The style exaggeration for the converted speech
+            // speakerBoost: true, // The speaker boost for the converted speech
           });
 
-          console.log('got response audio', tResponse);
+          console.log('streaming response audio');
 
           audioSource.addStream(tResponse, 16, 16000, 1);
           console.timeEnd('start');
+          resetSink();
 
           console.log('doneish');
         }
@@ -189,7 +192,7 @@ function timeout(ms: number) {
 async function getElevenLabs({voiceId, textInput, stability, similarityBoost, modelId, style, speakerBoost}: any) {
   const elevenLabsAPIV1 = 'https://api.elevenlabs.io/v1';
   const voiceIdValue = voiceId;
-  const voiceURL = `${elevenLabsAPIV1}/text-to-speech/${voiceIdValue}`;
+  const voiceURL = `${elevenLabsAPIV1}/text-to-speech/${voiceIdValue}/stream`;
   const stabilityValue = stability ? stability : 0;
   const similarityBoostValue = similarityBoost ? similarityBoost : 0;
   const styleValue = style ? style : 0;

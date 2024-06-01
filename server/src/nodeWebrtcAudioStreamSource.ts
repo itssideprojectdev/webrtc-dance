@@ -10,7 +10,6 @@ export class NodeWebRtcAudioStreamSource extends nonstandard.RTCAudioSource {
     });
 
     readable.on('end', () => {
-      console.log('stream end');
       streamEnd = true;
     });
 
