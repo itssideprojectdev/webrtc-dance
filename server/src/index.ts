@@ -10,8 +10,9 @@ import {RTCAudioData} from '@roamhq/wrtc/types/nonstandard';
 import {OpenAI, toFile} from 'openai';
 import {makeOpenaiRequest, makeOpenaiRequestRaw} from './openai';
 import {z} from 'zod';
-import {NodeWebRtcAudioStreamSource} from './nodeWebrtcAudioStreamSource';
+import {EasyReadable, NodeWebRtcAudioStreamSource} from './nodeWebrtcAudioStreamSource';
 import axios from 'axios';
+import {Readable} from 'stream';
 
 config();
 
@@ -106,6 +107,7 @@ async function main() {
           stopSink = true;
           console.log('processing audio');
           console.time('start');
+          console.time('ai');
           const mp3buf = mp3Encoder.flush();
           if (mp3buf.length > 0) {
             mp3Data.push(mp3buf);
@@ -133,22 +135,30 @@ async function main() {
             temperature: 0,
           });
           console.log('response', response);
-
-          const tResponse = await getElevenLabs({
-            // Required Parameters
-            textInput: response, // The text you want to convert to speech
-            // Optional Parameters
-            voiceId: 'N2lVS1w4EtoT3dr4eOWO', // A different Voice ID from the default
-            // stability: 0.5, // The stability for the converted speech
-            // similarityBoost: 0.5, // The similarity boost for the converted speech
-            modelId: 'eleven_multilingual_v2', // The ElevenLabs Model ID
-            // style: 1, // The style exaggeration for the converted speech
-            // speakerBoost: true, // The speaker boost for the converted speech
+          console.timeEnd('ai');
+          const readable = new Readable({
+            read(size: number) {
+              // do nothing
+            },
           });
+          await getElevenLabs(
+            {
+              // Required Parameters
+              textInput: response, // The text you want to convert to speech
+              // Optional Parameters
+              voiceId: 'N2lVS1w4EtoT3dr4eOWO', // A different Voice ID from the default
+              // stability: 0.5, // The stability for the converted speech
+              // similarityBoost: 0.5, // The similarity boost for the converted speech
+              modelId: 'eleven_turbo_v2', // The ElevenLabs Model ID
+              // style: 1, // The style exaggeration for the converted speech
+              // speakerBoost: true, // The speaker boost for the converted speech
+            },
+            readable
+          );
 
           console.log('streaming response audio');
 
-          audioSource.addStream(tResponse, 16, 16000, 1);
+          audioSource.addStream(readable, 16, 16000, 1);
           console.timeEnd('start');
           resetSink();
 
@@ -189,7 +199,10 @@ main().then(() => {});
 function timeout(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
-async function getElevenLabs({voiceId, textInput, stability, similarityBoost, modelId, style, speakerBoost}: any) {
+async function getElevenLabs(
+  {voiceId, textInput, stability, similarityBoost, modelId, style, speakerBoost}: any,
+  readable: Readable
+) {
   const elevenLabsAPIV1 = 'https://api.elevenlabs.io/v1';
   const voiceIdValue = voiceId;
   const voiceURL = `${elevenLabsAPIV1}/text-to-speech/${voiceIdValue}/stream`;
@@ -198,10 +211,15 @@ async function getElevenLabs({voiceId, textInput, stability, similarityBoost, mo
   const styleValue = style ? style : 0;
 
   try {
-    const response = await axios({
+    console.time('start axios');
+    const response = await fetch(`${voiceURL}?output_format=pcm_16000&optimize_streaming_latency=2`, {
       method: 'POST',
-      url: voiceURL + '?output_format=pcm_16000',
-      data: {
+      headers: {
+        Accept: 'audio/wav',
+        'xi-api-key': process.env.ELEVENLABS_API_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
         text: textInput,
         voice_settings: {
           stability: stabilityValue,
@@ -210,16 +228,25 @@ async function getElevenLabs({voiceId, textInput, stability, similarityBoost, mo
           use_speaker_boost: speakerBoost,
         },
         model_id: modelId ? modelId : undefined,
-      },
-      headers: {
-        Accept: 'audio/wav',
-        'xi-api-key': process.env.ELEVENLABS_API_KEY,
-        'Content-Type': 'application/json',
-      },
-      responseType: 'stream',
+      }),
     });
+    console.timeEnd('start axios');
 
-    return response.data;
+    if (response.ok) {
+      console.log('ready');
+      console.time('stream');
+      const reader = response.body!.getReader();
+
+      while (true) {
+        const {done, value} = await reader.read();
+
+        if (done) {
+          console.timeEnd('stream');
+          break;
+        }
+        readable.push(value);
+      }
+    }
   } catch (ex) {
     console.log(ex);
   }

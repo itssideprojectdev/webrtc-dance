@@ -5,6 +5,7 @@ export class NodeWebRtcAudioStreamSource extends nonstandard.RTCAudioSource {
   addStream(readable: Readable, bitsPerSample = 16, sampleRate = 48000, channelCount = 1) {
     let cache = Buffer.alloc(0);
     let streamEnd = false;
+
     readable.on('data', (buffer) => {
       cache = Buffer.concat([cache, buffer]);
     });
