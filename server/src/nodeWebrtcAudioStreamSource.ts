@@ -6,7 +6,6 @@ export class NodeWebRtcAudioStreamSource extends nonstandard.RTCAudioSource {
     let cache = Buffer.alloc(0);
     let streamEnd = false;
     readable.on('data', (buffer) => {
-      console.log('stream data');
       cache = Buffer.concat([cache, buffer]);
     });
 
@@ -21,7 +20,6 @@ export class NodeWebRtcAudioStreamSource extends nonstandard.RTCAudioSource {
         const buffer = cache.slice(0, byteLength);
         cache = cache.slice(byteLength);
         const samples = new Int16Array(new Uint8Array(buffer).buffer);
-        console.log('sending data');
         this.onData({
           bitsPerSample,
           sampleRate,
