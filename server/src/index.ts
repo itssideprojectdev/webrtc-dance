@@ -10,7 +10,7 @@ import {RTCAudioData} from '@roamhq/wrtc/types/nonstandard';
 import {OpenAI, toFile} from 'openai';
 import {makeOpenaiRequest, makeOpenaiRequestRaw} from './openai';
 import {z} from 'zod';
-import {EasyReadable, NodeWebRtcAudioStreamSource} from './nodeWebrtcAudioStreamSource';
+import {NodeWebRtcAudioStreamSource} from './nodeWebrtcAudioStreamSource';
 import axios from 'axios';
 import {Readable} from 'stream';
 import WebSocket from 'ws';
@@ -99,7 +99,6 @@ async function main() {
             countInLowestSample = 0;
           }
           if (countInLowestSample > 20) {
-            console.log('finished');
             onFinish();
           }
           // wait for the audio to finish
@@ -108,8 +107,7 @@ async function main() {
         async function onFinish() {
           stopSink = true;
           console.log('processing audio');
-          console.time('start');
-          console.time('ai');
+          console.time('end to end');
           const mp3buf = mp3Encoder.flush();
           if (mp3buf.length > 0) {
             mp3Data.push(mp3buf);
@@ -117,7 +115,6 @@ async function main() {
           const blob = new Blob(mp3Data, {type: 'audio/mp3'});
           mp3Data.length = 0;
           const buffer = Buffer.from(await blob.arrayBuffer());
-          console.log('wrote audio');
 
           const stream = {
             current: () => {},
@@ -139,7 +136,10 @@ async function main() {
               // speakerBoost: true, // The speaker boost for the converted speech
             },
             readable,
-            stream
+            stream,
+            () => {
+              console.timeEnd('end to end');
+            }
           );
 
           audioSource.addStream(readable, 16, 16000, 1);
@@ -148,7 +148,6 @@ async function main() {
             file: await toFile(buffer, 'audio.mp3'),
             model: 'whisper-1',
             language: 'en',
-            response_format: 'text',
           });
           console.log('transcribed', transcription);
 
@@ -156,7 +155,7 @@ async function main() {
             {
               model: 'gpt-4o',
               systemMessage: 'You respond to questions. Be helpful but terse.',
-              userMessage: transcription,
+              userMessage: transcription.text,
               // zSchema: z.object({
               //   response: z.string(),
               // }),
@@ -164,12 +163,7 @@ async function main() {
             },
             stream
           );
-          console.timeEnd('ai');
-
-          console.timeEnd('start');
           resetSink();
-
-          console.log('doneish');
         }
       };
 
@@ -262,7 +256,8 @@ async function getElevenLabs(
 async function getElevenLabsWS(
   {voiceId, stability, similarityBoost, modelId, style, speakerBoost}: any,
   readable: Readable,
-  onGetText: {current: (text: string) => void}
+  onGetText: {current: (text: string) => void},
+  onFirstAudio: () => void
 ) {
   const ws = new WebSocket(
     `wss://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream-input?model_id=${modelId}&output_format=pcm_16000`
@@ -271,19 +266,17 @@ async function getElevenLabsWS(
 
   const send = (text: string) => {
     if (text === null) {
-      console.log('flush');
     }
     if (text === '') return;
     let s = JSON.stringify({
       text: text,
       flush: text === null,
-      try_trigger_generation: false,
+      try_trigger_generation: true,
       xi_api_key: process.env.ELEVENLABS_API_KEY,
       generation_config: {
         chunk_length_schedule: [50, 160, 250, 290],
       },
     });
-    console.log('connected', s);
     ws.send(s);
   };
 
@@ -291,7 +284,6 @@ async function getElevenLabsWS(
   let first = false;
   onGetText.current = (text: string) => {
     if (!first) {
-      console.log('got first');
       first = true;
     }
     if (ws.readyState === WebSocket.OPEN) {
@@ -307,10 +299,15 @@ async function getElevenLabsWS(
   };
 
   ws.on('open', function open() {});
+  let firstAudio = false;
   ws.on('message', function incoming(data) {
+    if (!firstAudio) {
+      firstAudio = true;
+      onFirstAudio();
+    }
     let parse = JSON.parse(data.toString());
     if (!parse.audio) {
-      console.log(parse);
+      // console.log(parse);
     } else {
       const base64 = parse.audio;
       const buffer = Buffer.from(base64, 'base64');
