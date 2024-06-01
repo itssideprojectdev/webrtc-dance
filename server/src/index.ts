@@ -13,8 +13,10 @@ import {z} from 'zod';
 import {EasyReadable, NodeWebRtcAudioStreamSource} from './nodeWebrtcAudioStreamSource';
 import axios from 'axios';
 import {Readable} from 'stream';
+import WebSocket from 'ws';
 
 config();
+const openai = new OpenAI(process.env.OPENAI_API_KEY);
 
 async function main() {
   const app = express();
@@ -116,35 +118,18 @@ async function main() {
           mp3Data.length = 0;
           const buffer = Buffer.from(await blob.arrayBuffer());
           console.log('wrote audio');
-          const openai = new OpenAI(process.env.OPENAI_API_KEY);
-          const transcription = await openai.audio.transcriptions.create({
-            file: await toFile(buffer, 'audio.mp3'),
-            model: 'whisper-1',
-            language: 'en',
-            response_format: 'text',
-          });
-          console.log('transcribed', transcription);
 
-          const response = await makeOpenaiRequestRaw({
-            model: 'gpt-4o',
-            systemMessage: 'You respond to questions. Be helpful but terse.',
-            userMessage: transcription,
-            // zSchema: z.object({
-            //   response: z.string(),
-            // }),
-            temperature: 0,
-          });
-          console.log('response', response);
-          console.timeEnd('ai');
+          const stream = {
+            current: () => {},
+          };
           const readable = new Readable({
             read(size: number) {
               // do nothing
             },
           });
-          await getElevenLabs(
+          await getElevenLabsWS(
             {
               // Required Parameters
-              textInput: response, // The text you want to convert to speech
               // Optional Parameters
               voiceId: 'N2lVS1w4EtoT3dr4eOWO', // A different Voice ID from the default
               // stability: 0.5, // The stability for the converted speech
@@ -153,12 +138,34 @@ async function main() {
               // style: 1, // The style exaggeration for the converted speech
               // speakerBoost: true, // The speaker boost for the converted speech
             },
-            readable
+            readable,
+            stream
           );
 
-          console.log('streaming response audio');
-
           audioSource.addStream(readable, 16, 16000, 1);
+
+          const transcription = await openai.audio.transcriptions.create({
+            file: await toFile(buffer, 'audio.mp3'),
+            model: 'whisper-1',
+            language: 'en',
+            response_format: 'text',
+          });
+          console.log('transcribed', transcription);
+
+          await makeOpenaiRequestRaw(
+            {
+              model: 'gpt-4o',
+              systemMessage: 'You respond to questions. Be helpful but terse.',
+              userMessage: transcription,
+              // zSchema: z.object({
+              //   response: z.string(),
+              // }),
+              temperature: 0,
+            },
+            stream
+          );
+          console.timeEnd('ai');
+
           console.timeEnd('start');
           resetSink();
 
@@ -211,7 +218,6 @@ async function getElevenLabs(
   const styleValue = style ? style : 0;
 
   try {
-    console.time('start axios');
     const response = await fetch(`${voiceURL}?output_format=pcm_16000&optimize_streaming_latency=2`, {
       method: 'POST',
       headers: {
@@ -250,5 +256,67 @@ async function getElevenLabs(
   } catch (ex) {
     console.log(ex);
   }
+  return null;
+}
+
+async function getElevenLabsWS(
+  {voiceId, stability, similarityBoost, modelId, style, speakerBoost}: any,
+  readable: Readable,
+  onGetText: {current: (text: string) => void}
+) {
+  const ws = new WebSocket(
+    `wss://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream-input?model_id=${modelId}&output_format=pcm_16000`
+  );
+  // no array buffer
+
+  const send = (text: string) => {
+    if (text === null) {
+      console.log('flush');
+    }
+    if (text === '') return;
+    let s = JSON.stringify({
+      text: text,
+      flush: text === null,
+      try_trigger_generation: false,
+      xi_api_key: process.env.ELEVENLABS_API_KEY,
+      generation_config: {
+        chunk_length_schedule: [50, 160, 250, 290],
+      },
+    });
+    console.log('connected', s);
+    ws.send(s);
+  };
+
+  let buffer = '';
+  let first = false;
+  onGetText.current = (text: string) => {
+    if (!first) {
+      console.log('got first');
+      first = true;
+    }
+    if (ws.readyState === WebSocket.OPEN) {
+      if (buffer.length > 0) {
+        send(buffer + text);
+        buffer = '';
+      } else {
+        send(text);
+      }
+    } else {
+      buffer += text;
+    }
+  };
+
+  ws.on('open', function open() {});
+  ws.on('message', function incoming(data) {
+    let parse = JSON.parse(data.toString());
+    if (!parse.audio) {
+      console.log(parse);
+    } else {
+      const base64 = parse.audio;
+      const buffer = Buffer.from(base64, 'base64');
+      readable.push(buffer);
+    }
+  });
+
   return null;
 }

@@ -60,20 +60,23 @@ export async function makeOpenaiRequest<T>({
   }
   return undefined;
 }
-export async function makeOpenaiRequestRaw({
-  systemMessage,
-  userMessage,
-  model = 'gpt-3.5-turbo',
-  temperature = 0,
-}: {
-  systemMessage: string;
-  userMessage: string;
-  model?: 'gpt-3.5-turbo' | 'gpt-4' | 'gpt-4o' | 'gpt-3.5-turbo-16k';
-  temperature?: number;
-}): Promise<string | undefined> {
+export async function makeOpenaiRequestRaw(
+  {
+    systemMessage,
+    userMessage,
+    model = 'gpt-3.5-turbo',
+    temperature = 0,
+  }: {
+    systemMessage: string;
+    userMessage: string;
+    model?: 'gpt-3.5-turbo' | 'gpt-4' | 'gpt-4o' | 'gpt-3.5-turbo-16k';
+    temperature?: number;
+  },
+  stream: {current: (text: string | null) => void}
+): Promise<void> {
   const client = new OpenAI({fetch: fetch as any, apiKey: process.env.OPENAI_API_KEY});
   const result = await client.chat.completions.create({
-    // stream: true,
+    stream: true,
     model: model,
     temperature,
     messages: [
@@ -81,8 +84,8 @@ export async function makeOpenaiRequestRaw({
       {role: 'user', content: userMessage},
     ],
   });
-
-  console.log(result.usage?.prompt_tokens ?? 0, result.usage?.completion_tokens ?? 0);
-
-  return result.choices[0]?.message?.content ?? '';
+  for await (const choice of result) {
+    stream.current(choice.choices[0].delta.content!);
+  }
+  stream.current(null);
 }
