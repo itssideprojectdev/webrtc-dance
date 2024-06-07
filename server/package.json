@@ -23,6 +23,7 @@
     "express": "^4.19.2",
     "lamejs": "zhuker/lamejs",
     "openai": "4.47.3",
+    "pronouncing": "github:aparrish/pronouncingjs",
     "socket.io": "^4.7.5",
     "wav-decoder": "^1.3.0",
     "wav-encoder": "^1.3.0",

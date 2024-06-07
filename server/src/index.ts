@@ -1,3 +1,4 @@
+import pronouncing from 'pronouncing';
 import {config} from 'dotenv';
 import express from 'express';
 import http from 'http';
@@ -300,20 +301,220 @@ async function getElevenLabsWS(
 
   ws.on('open', function open() {});
   let firstAudio = false;
-  ws.on('message', function incoming(data) {
+  ws.on('message', function incoming(data: string) {
     if (!firstAudio) {
       firstAudio = true;
       onFirstAudio();
     }
-    let parse = JSON.parse(data.toString());
+    let parse = JSON.parse(data.toString()) as Result;
     if (!parse.audio) {
       // console.log(parse);
     } else {
       const base64 = parse.audio;
       const buffer = Buffer.from(base64, 'base64');
-      readable.push(buffer);
+      readable.push({
+        buffer,
+        phones: processPhones(parse),
+      });
     }
   });
 
   return null;
 }
+
+type Result = {
+  audio: string;
+  alignment: {
+    chars: string[];
+    charStartTimesMs: number[];
+  };
+};
+
+const phones = [
+  'AA',
+  'AE',
+  'AH',
+  'AO',
+  'AW',
+  'AY',
+  'B',
+  'CH',
+  'D',
+  'DH',
+  'EH',
+  'ER',
+  'EY',
+  'F',
+  'G',
+  'HH',
+  'IH',
+  'IY',
+  'JH',
+  'K',
+  'L',
+  'M',
+  'N',
+  'NG',
+  'OW',
+  'OY',
+  'P',
+  'R',
+  'S',
+  'SH',
+  'T',
+  'TH',
+  'UH',
+  'UW',
+  'V',
+  'W',
+  'Y',
+  'Z',
+  'ZH',
+];
+
+const phonesLookup: {
+  [key: string]: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'X';
+} = {
+  AA: 'D',
+  AE: 'C',
+  AH: 'D',
+  AO: 'E',
+  AW: 'F',
+  AY: 'C',
+  B: 'A',
+  CH: 'B',
+  D: 'B',
+  DH: 'B',
+  EH: 'C',
+  ER: 'E',
+  EY: 'C',
+  F: 'G',
+  G: 'B',
+  HH: 'B',
+  IH: 'C',
+  IY: 'B',
+  JH: 'B',
+  K: 'B',
+  L: 'H',
+  M: 'A',
+  N: 'B',
+  NG: 'B',
+  OW: 'F',
+  OY: 'F',
+  P: 'A',
+  R: 'E',
+  S: 'B',
+  SH: 'B',
+  T: 'B',
+  TH: 'B',
+  UH: 'E',
+  UW: 'F',
+  V: 'G',
+  W: 'F',
+  Y: 'F',
+  Z: 'B',
+  ZH: 'B',
+  pause: 'X',
+};
+
+export type PhonesResult = {
+  time: number;
+  duration: number;
+  word: string;
+  phones: ('A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'X')[];
+}[];
+
+function processPhones(result: Result): PhonesResult {
+  let words: PhonesResult = [];
+  let currentWord = '';
+  for (let i = 0; i < result.alignment.chars.length; i++) {
+    const char = result.alignment.chars[i];
+    if (/[\s,.!?;:()]+/.test(char)) {
+      if (currentWord.length > 0) {
+        words.push({
+          time: result.alignment.charStartTimesMs[i - currentWord.length],
+          duration: result.alignment.charStartTimesMs[i] - result.alignment.charStartTimesMs[i - currentWord.length],
+          word: currentWord,
+          phones: (pronouncing.phonesForWord(currentWord.toLowerCase()) as string[])[0]
+            .split(' ')
+            .map((e) => phonesLookup[e.replace(/\d/g, '')]),
+        });
+        currentWord = '';
+      }
+      continue;
+    }
+    currentWord += char;
+  }
+  if (currentWord.length > 0) {
+    words.push({
+      time: result.alignment.charStartTimesMs[result.alignment.chars.length - currentWord.length],
+      duration:
+        result.alignment.charStartTimesMs[result.alignment.chars.length] -
+        result.alignment.charStartTimesMs[result.alignment.chars.length - currentWord.length],
+      word: currentWord,
+      phones: (pronouncing.phonesForWord(currentWord.toLowerCase()) as string[])[0]
+        .split(' ')
+        .map((e) => phones.indexOf(e.replace(/\d/g, ''))),
+    });
+  }
+  return words;
+}
+
+const res = {
+  alignment: {
+    chars: [
+      'Y',
+      'o',
+      'u',
+      "'",
+      'r',
+      'e',
+      ' ',
+      ' ',
+      'w',
+      'e',
+      'l',
+      'c',
+      'o',
+      'm',
+      'e',
+      '!',
+      ' ',
+      'H',
+      'o',
+      'w',
+      ' ',
+      'c',
+      'a',
+      'n',
+      ' ',
+      'I',
+      ' ',
+      'a',
+      's',
+      's',
+      'i',
+      's',
+      't',
+      ' ',
+      'y',
+      'o',
+      'u',
+      ' ',
+      ' ',
+      't',
+      'o',
+      'd',
+      'a',
+      'y',
+      '?',
+    ],
+    charStartTimesMs: [
+      0, 93, 128, 163, 209, 244, 267, 290, 290, 325, 372, 453, 546, 604, 662, 813, 859, 1184, 1265, 1324, 1358, 1405,
+      1440, 1486, 1533, 1579, 1625, 1683, 1730, 1788, 1846, 1892, 1950, 1985, 2032, 2067, 2090, 2125, 2183, 2183, 2218,
+      2264, 2357, 2415, 2566,
+    ],
+  },
+  audio: '',
+};
+console.log(processPhones(res));

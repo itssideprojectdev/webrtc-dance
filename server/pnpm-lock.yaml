@@ -32,6 +32,9 @@ importers:
       openai:
         specifier: 4.47.3
         version: 4.47.3
+      pronouncing:
+        specifier: github:aparrish/pronouncingjs
+        version: https://codeload.github.com/aparrish/pronouncingjs/tar.gz/3713e548d00000e3e2d1ad7150ef2ea800448ec3
       socket.io:
         specifier: ^4.7.5
         version: 4.7.5
@@ -744,6 +747,10 @@ packages:
     engines: {node: '>=14'}
     hasBin: true
 
+  pronouncing@https://codeload.github.com/aparrish/pronouncingjs/tar.gz/3713e548d00000e3e2d1ad7150ef2ea800448ec3:
+    resolution: {tarball: https://codeload.github.com/aparrish/pronouncingjs/tar.gz/3713e548d00000e3e2d1ad7150ef2ea800448ec3}
+    version: 0.0.1
+
   proxy-addr@2.0.7:
     resolution: {integrity: sha512-llQsMLSUDUPT44jdrU/O37qlnifitDP+ZwrmmZcoSKyLKvtZxpyV0n2/bD/N4tBAAZ/gJEdZU7KMraoK1+XYAg==}
     engines: {node: '>= 0.10'}
@@ -855,6 +862,9 @@ packages:
 
   undefsafe@2.0.5:
     resolution: {integrity: sha512-WxONCrssBM8TSPRqN5EmsjVrsv4A8X12J4ArBiiayv3DyyG3ZlIg6yysuuSYdZsVz3TKcTg2fd//Ujd4CHV1iA==}
+
+  underscore@1.13.6:
+    resolution: {integrity: sha512-+A5Sja4HP1M08MaXya7p5LvjuM7K6q/2EaC0+iovj/wOcMsTzMvDFbasi/oSapiwOlt252IqsKqPjCl7huKS0A==}
 
   undici-types@5.26.5:
     resolution: {integrity: sha512-JlCMO+ehdEIKqlFxk6IfVoAUVmgz7cU7zD/h9XZ0qzeosSHmUJVOzSQvvYSYWXkFXC+IfLKSIffhv0sVZup6pA==}
@@ -1582,6 +1592,10 @@ snapshots:
 
   prettier@3.2.5: {}
 
+  pronouncing@https://codeload.github.com/aparrish/pronouncingjs/tar.gz/3713e548d00000e3e2d1ad7150ef2ea800448ec3:
+    dependencies:
+      underscore: 1.13.6
+
   proxy-addr@2.0.7:
     dependencies:
       forwarded: 0.2.0
@@ -1723,6 +1737,8 @@ snapshots:
   typescript@5.4.5: {}
 
   undefsafe@2.0.5: {}
+
+  underscore@1.13.6: {}
 
   undici-types@5.26.5: {}
 
